@@ -75,3 +75,76 @@ function git_remove_last_commit() {
 
 # Alias for convenience
 alias grmlc='git_remove_last_commit'
+
+# Push, setting the upstream automatically when the branch isn't on the remote
+# yet, instead of failing with "no upstream branch".
+# Usage: git_push_auto_upstream [<git push args>]
+function git_push_auto_upstream() {
+  local -a value_flags=(-o --push-option --receive-pack --exec --repo)
+  local arg has_target=0 has_upstream_flag=0 skip_next=0 rest=0
+
+  for arg in "$@"; do
+    if (( skip_next )); then
+      skip_next=0
+      continue
+    fi
+    if (( rest )); then
+      has_target=1
+      break
+    fi
+    case "$arg" in
+      --) rest=1 ;;
+      -u|--set-upstream) has_upstream_flag=1 ;;
+      --repo=*) has_target=1 ;;
+      *)
+        if (( ${value_flags[(Ie)$arg]} )); then
+          skip_next=1
+        elif [[ "$arg" != -* ]]; then
+          has_target=1
+        fi
+        ;;
+    esac
+  done
+
+  # An explicit remote, or an explicit -u, means the caller knows what they want.
+  if (( has_target || has_upstream_flag )); then
+    command git push "$@"
+    return
+  fi
+
+  local branch=$(command git symbolic-ref --quiet --short HEAD 2>/dev/null)
+  if [[ -z "$branch" ]] || command git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' &>/dev/null; then
+    command git push "$@"
+    return
+  fi
+
+  local remote=$(command git config --get "branch.$branch.remote")
+  if [[ -z "$remote" ]]; then
+    local -a remotes=(${(f)"$(command git remote)"})
+    if (( ${remotes[(Ie)origin]} )); then
+      remote=origin
+    elif (( ${#remotes} == 1 )); then
+      remote=$remotes[1]
+    else
+      # No remote, or several and no obvious pick — let git report it.
+      command git push "$@"
+      return
+    fi
+  fi
+
+  print -u2 "git-utils: no upstream, running: git push --set-upstream $remote $branch"
+  command git push --set-upstream "$@" "$remote" "$branch"
+}
+
+# Wrap `git` so a bare `git push` gets the behaviour above.
+# Set GIT_AUTO_UPSTREAM=false to opt out.
+function git() {
+  if [[ "$1" == push && "${GIT_AUTO_UPSTREAM:-true}" == true ]]; then
+    shift
+    git_push_auto_upstream "$@"
+    return
+  fi
+  command git "$@"
+}
+
+alias gpu='git_push_auto_upstream'
