@@ -1,21 +1,7 @@
 # Add your own custom plugins in the custom/plugins directory. Plugins placed
 # here will override ones with the same name in the main plugins directory.
 
-## -------------- Alias ---------------------------
-
-# Function to check for updates to the current directory if the CD is a git repo
-cd () { 
-  builtin cd "$@" && 
-  cd_git_checker; 
-}
-
-cd_git_checker () { 
-  if [ -d .git ]; then
-    git fetch
-  fi;
-}
-
-## --------------- Custom Functions --------------- 
+## --------------- Custom Functions ---------------
 
 function editZSH {
   subl ~/.zshrc;
